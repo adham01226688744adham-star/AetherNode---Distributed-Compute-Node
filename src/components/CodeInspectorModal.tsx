@@ -47,25 +47,37 @@ export const CodeInspectorModal: React.FC<CodeInspectorModalProps> = ({ isOpen, 
           srcFolder?.folder('computation')?.file('CryptoComputeEngine.kt', file.content);
         } else if (file.filename === 'SystemHardwareMonitor.kt') {
           srcFolder?.folder('hardware')?.file('SystemHardwareMonitor.kt', file.content);
+        } else if (file.filename === 'ThermalProtectionWatchdog.kt') {
+          srcFolder?.folder('hardware')?.file('ThermalProtectionWatchdog.kt', file.content);
+        } else if (file.filename === 'MiningPoolClient.kt') {
+          srcFolder?.folder('stratum')?.file('MiningPoolClient.kt', file.content);
         } else if (file.filename === 'Web3TransferManager.kt') {
           srcFolder?.folder('web3')?.file('Web3TransferManager.kt', file.content);
+        } else if (file.filename === 'Web3SecurityVault.kt') {
+          srcFolder?.folder('web3')?.file('Web3SecurityVault.kt', file.content);
         } else if (file.filename === 'ComputeDashboardUi.kt') {
           srcFolder?.folder('ui')?.file('ComputeDashboardUi.kt', file.content);
+        } else if (file.filename === 'README-APK-BUILD.md') {
+          appFolder?.file('README-APK-BUILD.md', file.content);
         }
       });
+
+      // Add settings.gradle.kts and root files
+      appFolder?.file('settings.gradle.kts', `rootProject.name = "AetherNode"\ninclude(":app")\n`);
 
       // Add a clean README.md
       appFolder?.file(
         'README.md',
-        `# AetherNode - Background Distributed Compute & Node Client
+        `# AetherNode - Background Distributed Compute & Mining Node Client
 Production-ready Android application implementing:
-1. Android 14+ Foreground Service with persistent notifications (FOREGROUND_SERVICE_TYPE_DATA_SYNC).
-2. CPU duty-cycle throttling capped strictly at (Available Cores / 2) and under 50% max CPU power.
-3. Hardware thermal monitoring & safety backoff via Intent.ACTION_BATTERY_CHANGED and PowerManager.
-4. Web3j EVM layer for direct ERC-20 token withdrawals to MetaMask on Polygon and BSC.
-5. Jetpack Compose Material 3 telemetry dashboard.
+1. Real cryptographic double-SHA256d mining with Stratum / JSON-RPC protocol support.
+2. Android 14+ Foreground Service with persistent notifications (FOREGROUND_SERVICE_TYPE_DATA_SYNC).
+3. CPU duty-cycle throttling capped strictly at (Available Cores / 2) and under 50% max CPU power.
+4. Automatic thermal watchdog: auto-halts compute at 43°C and resumes at 38.5°C.
+5. Web3j EVM layer for direct ERC-20 token withdrawals to MetaMask on Polygon and BSC.
+6. Jetpack Compose Material 3 telemetry dashboard.
 
-Import into Android Studio Hedgehog / Iguana or later with JDK 17.`
+Compile APK: ./gradlew assembleDebug`
       );
 
       const content = await zip.generateAsync({ type: 'blob' });

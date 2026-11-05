@@ -5,7 +5,7 @@ export class HardwareMonitorWeb {
   private activeThreads: number = 4;
   private cpuThrottlePct: PowerBudgetPreset = 30;
 
-  private batteryLevel: number = 85;
+  private batteryLevel: number = 88;
   private batteryTemp: number = 29.4;
   private batteryHealth: 'GOOD' | 'OVERHEAT' | 'DEAD' | 'OVER_VOLTAGE' | 'UNSPECIFIED_FAILURE' = 'GOOD';
   private isCharging: boolean = false;
@@ -16,6 +16,14 @@ export class HardwareMonitorWeb {
   private baseTemp: number = 29.0;
   private uptimeSeconds: number = 0;
 
+  // Thermal Protection Watchdog state
+  private isThermalPaused: boolean = false;
+  private thermalPauseReason: string = '';
+  private forcedSpike: boolean = false;
+
+  private onThermalEmergency?: (reason: string) => void;
+  private onThermalNormalized?: () => void;
+
   constructor() {
     if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) {
       this.availableCores = navigator.hardwareConcurrency;
@@ -23,6 +31,11 @@ export class HardwareMonitorWeb {
     // Limit active threads strictly to Available Cores / 2
     this.activeThreads = Math.max(1, Math.floor(this.availableCores / 2));
     this.initRealBatteryIfAvailable();
+  }
+
+  public setThermalCallbacks(onEmergency: (reason: string) => void, onNormalized: () => void) {
+    this.onThermalEmergency = onEmergency;
+    this.onThermalNormalized = onNormalized;
   }
 
   private async initRealBatteryIfAvailable() {
@@ -55,39 +68,63 @@ export class HardwareMonitorWeb {
     this.isRunning = running;
   }
 
+  public toggleThermalSimulation(spike: boolean) {
+    this.forcedSpike = spike;
+    if (spike) {
+      this.batteryTemp = 44.2;
+    } else {
+      this.batteryTemp = 34.0;
+    }
+  }
+
   public tick(): HardwareTelemetryData {
-    if (this.isRunning) {
+    if (this.isRunning && !this.isThermalPaused) {
       this.uptimeSeconds++;
-      // Thermodynamic model:
-      // 15% budget: target ~32.5°C
-      // 30% budget: target ~36.8°C
-      // 45% budget: target ~40.2°C
       const targetTemp =
         this.baseTemp +
         (this.cpuThrottlePct === 15 ? 3.5 : this.cpuThrottlePct === 30 ? 7.8 : 11.2) +
         (this.isCharging ? 1.8 : 0);
 
-      // Smooth thermodynamic approach
       const diff = targetTemp - this.batteryTemp;
       this.batteryTemp += diff * 0.04;
-      // Add slight micro-fluctuations (0.1°C)
       this.batteryTemp += (Math.random() - 0.5) * 0.1;
     } else {
       // Cool down towards ambient base
       const diff = this.baseTemp - this.batteryTemp;
-      this.batteryTemp += diff * 0.05;
+      this.batteryTemp += diff * 0.08; // Cools down slightly faster when paused
     }
 
-    // Determine thermal status
+    if (this.forcedSpike) {
+      this.batteryTemp = Math.max(this.batteryTemp, 44.5);
+    }
+
+    // Thermal Watchdog Protection Engine
     if (this.batteryTemp >= 43.0) {
-      this.thermalStatus = 'SERIOUS';
+      this.thermalStatus = 'CRITICAL';
       this.batteryHealth = 'OVERHEAT';
+
+      if (!this.isThermalPaused) {
+        this.isThermalPaused = true;
+        this.thermalPauseReason = `Emergency Thermal Cutoff: Temperature reached ${this.batteryTemp.toFixed(1)}°C (Limit: 43.0°C). Mining halted.`;
+        if (this.onThermalEmergency) {
+          this.onThermalEmergency(this.thermalPauseReason);
+        }
+      }
     } else if (this.batteryTemp >= 39.5) {
       this.thermalStatus = 'FAIR';
       this.batteryHealth = 'GOOD';
     } else {
       this.thermalStatus = 'NOMINAL';
       this.batteryHealth = 'GOOD';
+
+      // Hysteresis Recovery: resume when cooled below 38.5°C
+      if (this.isThermalPaused && this.batteryTemp <= 38.5 && !this.forcedSpike) {
+        this.isThermalPaused = false;
+        this.thermalPauseReason = '';
+        if (this.onThermalNormalized) {
+          this.onThermalNormalized();
+        }
+      }
     }
 
     const dutyActiveMs = Math.round((100 * this.cpuThrottlePct) / 100);
@@ -105,7 +142,9 @@ export class HardwareMonitorWeb {
       batteryTemperature: Number(this.batteryTemp.toFixed(1)),
       batteryHealth: this.batteryHealth,
       isCharging: this.isCharging,
-      powerSource: this.powerSource
+      powerSource: this.powerSource,
+      isThermalPaused: this.isThermalPaused,
+      thermalPauseReason: this.thermalPauseReason
     };
   }
 }
